@@ -1,9 +1,16 @@
-from pathlib import Path
+from __future__ import annotations
+
 import re
 import traceback
+from pathlib import Path
+from typing import Iterable
 
 from .event import LogEvent
 from .runtime import RuntimeContext
+
+# ---------------------------------------------------------------------------
+# PATH RESOLUTION
+# ---------------------------------------------------------------------------
 
 _SAFE_SEGMENT = re.compile(r"[^a-zA-Z0-9._-]+")
 
@@ -16,65 +23,120 @@ def _safe_segment(value: str | None, fallback: str) -> str:
 
 
 def resolve_log_path(event: LogEvent, ctx: RuntimeContext) -> Path:
+    """
+    Risolve il path logico di un evento di log.
+    Usato SOLO da filesystem / persistence transports.
+    """
     phase = _safe_segment(ctx.phase, "preboot")
     domain = _safe_segment(event.domain, "runtime")
-    owner = _safe_segment(event.owner, "general")
-    owner_lower = owner.lower()
+    owner = _safe_segment(event.owner, "general").lower()
 
     if domain == "preboot":
         return Path("preboot.log")
+
     if domain == "icenet":
         return Path("icenet") / f"{owner}.log"
+
     if domain == "ui":
         phase_override = None
         if isinstance(event.data, dict):
             phase_override = event.data.get("phase")
         ui_phase = _safe_segment(phase_override or phase, "preboot")
         return Path("ui") / ui_phase / "renderer.log"
+
     if domain == "backend":
-        if owner_lower in {"ws", "icews"}:
-            return Path("backend") / "ws" / "ws.log"
-        if owner_lower == "core":
-            return Path("backend") / "core" / "backend-core.log"
-        if owner_lower == "dashboard":
-            return Path("backend") / "dashboard" / "backend-dashboard.log"
-        if owner_lower == "ipc":
-            return Path("backend") / "dashboard" / "ipc.log"
+        if owner in {"ws", "icews"}:
+            return Path("backend/ws/ws.log")
+        if owner == "core":
+            return Path("backend/core/backend-core.log")
+        if owner == "dashboard":
+            return Path("backend/dashboard/backend-dashboard.log")
+        if owner == "ipc":
+            return Path("backend/dashboard/ipc.log")
         if phase == "preboot":
-            return Path("backend") / "preboot" / "backend-preboot.log"
+            return Path("backend/preboot/backend-preboot.log")
         return Path("backend") / phase / f"backend-{owner}.log"
+
     if domain == "llm":
         return Path("llm") / phase / "llm.log"
+
     if domain == "audit":
         return Path("audit") / f"{owner}.log"
+
     return Path("runtime.log")
 
 
-class LogRouter:
-    def __init__(self, runtime: RuntimeContext, transports):
-        self.runtime = runtime
-        self.transports = transports
+# ---------------------------------------------------------------------------
+# LOG ROUTER
+# ---------------------------------------------------------------------------
 
-    def route(self, event: LogEvent):
-        phase = (self.runtime.phase or "preboot").lower()
+class LogRouter:
+    """
+    Il LogRouter decide *se* un evento deve passare e *a chi* inviarlo.
+
+    - filtering per phase (preboot/runtime)
+    - fan-out verso sinks e transports
+    """
+
+    def __init__(
+        self,
+        ctx: RuntimeContext,
+        *,
+        sinks: Iterable[object] | None = None,
+        transports: Iterable[object] | None = None,
+    ) -> None:
+        self.ctx = ctx
+        self.sinks = list(sinks or [])
+        self.transports = list(transports or [])
+
+    def emit(self, event: LogEvent) -> None:
+        if not self._allow_event(event):
+            return
+
+        for sink in self.sinks:
+            try:
+                sink.emit(event)
+            except Exception:
+                pass  # sink non deve MAI rompere il runtime
+
+        for transport in self.transports:
+            try:
+                transport.send(event)
+            except Exception:
+                pass
+
+    def _allow_event(self, event: LogEvent) -> bool:
+        """
+        Regole di routing per fase runtime.
+        """
+        phase = (self.ctx.phase or "preboot").lower()
         domain = (event.domain or "").lower()
         scope = (event.scope or "").lower()
 
         if phase == "preboot":
             if domain not in {"preboot", "ui", "icenet", "backend"}:
-                return
+                return False
             if domain == "backend" and "preboot" not in scope:
-                return
-        elif phase == "runtime":
+                return False
+
+        if phase == "runtime":
             if domain == "preboot":
-                return
+                return False
 
-        for transport in self.transports:
-            transport.send(event)
+        return True
 
+
+# ---------------------------------------------------------------------------
+# STRUCTURED LOGGER (API PUBBLICA)
+# ---------------------------------------------------------------------------
 
 class StructuredLogger:
-    def __init__(self, domain: str, owner: str, scope: str):
+    """
+    Logger strutturato runtime-safe.
+    Non ha livelli interni: emette sempre eventi.
+    """
+
+    def __init__(self, domain: str, owner: str, scope: str) -> None:
         self.domain = domain
         self.owner = owner
         self.scope = scope
@@ -88,53 +150,60 @@ class StructuredLogger:
         extra: dict | None = None,
         exc_info: bool | BaseException | None = None,
     ) -> None:
-        from .api import emit
+        from .api import emit  # lazy import
 
-        if args:
-            text = str(msg) % args
-        else:
+        try:
+            text = msg % args if args else str(msg)
+        except Exception:
             text = str(msg)
+
         payload: dict | None = None
+
         if isinstance(extra, dict):
             payload = dict(extra)
+
         if data is not None:
-            if payload is None:
-                payload = {}
+            payload = payload or {}
             if isinstance(data, dict):
                 payload.update(data)
             else:
                 payload["data"] = data
+
         if exc_info:
-            if payload is None:
-                payload = {}
+            payload = payload or {}
             payload["exception"] = traceback.format_exc()
+
         emit(
             LogEvent(
-                LogEvent.now(),
-                level,
-                self.domain,
-                self.owner,
-                self.scope,
-                text,
-                payload,
-                None,
+                timestamp=LogEvent.now(),
+                level=level,
+                domain=self.domain,
+                owner=self.owner,
+                scope=self.scope,
+                message=text,
+                data=payload,
+                tags=None,
             )
         )
+
+    # ------------------------------------------------------------
+    # Livelli
+    # ------------------------------------------------------------
+
+    def debug(self, msg: str, *args: object, **kwargs: object) -> None:
+        self._emit("DEBUG", msg, *args, **kwargs)
 
     def info(self, msg: str, *args: object, **kwargs: object) -> None:
         self._emit("INFO", msg, *args, **kwargs)
 
-    def debug(self, msg: str, *args: object, **kwargs: object) -> None:
-        self._emit("DEBUG", msg, *args, **kwargs)
+    def warning(self, msg: str, *args: object, **kwargs: object) -> None:
+        self._emit("WARN", msg, *args, **kwargs)
 
     def warn(self, msg: str, *args: object, **kwargs: object) -> None:
         self._emit("WARN", msg, *args, **kwargs)
 
     def error(self, msg: str, *args: object, **kwargs: object) -> None:
         self._emit("ERROR", msg, *args, **kwargs)
-
-    def warning(self, msg: str, *args: object, **kwargs: object) -> None:
-        self._emit("WARN", msg, *args, **kwargs)
 
     def exception(self, msg: str, *args: object, **kwargs: object) -> None:
         kwargs.setdefault("exc_info", True)
@@ -144,8 +213,16 @@ class StructuredLogger:
         self._emit("FATAL", msg, *args, **kwargs)
 
     def setLevel(self, _level: object) -> None:
+        # Compatibilità logging.Logger
         return None
 
 
+# ---------------------------------------------------------------------------
+# FACTORY
+# ---------------------------------------------------------------------------
+
 def get_logger(domain: str, owner: str, scope: str) -> StructuredLogger:
+    """
+    Entry point unico per ottenere un logger runtime-safe.
+    """
     return StructuredLogger(domain, owner, scope)

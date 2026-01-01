@@ -1,33 +1,39 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Any, Optional, Dict
 from datetime import datetime
-import json
+from typing import Any, Dict, Optional
+
 
 @dataclass(frozen=True)
 class LogEvent:
-    ts: str
-    level: str                # TRACE|DEBUG|INFO|WARN|ERROR|FATAL
-    domain: str               # runtime, backend, ui, llm, icenet, audit
-    owner: str                # es: dashboard, workspace-1, system-agent
-    scope: str                # modulo / classe
+    """
+    Evento di logging strutturato e IMMUTABILE.
+    """
+    ts: datetime
+    level: str
+    domain: str
+    owner: str
+    scope: str
     msg: str
     data: Optional[Dict[str, Any]]
-    runtime_id: Optional[str]
+    runtime_id: Optional[str] = None
 
     @staticmethod
-    def now():
-        return datetime.utcnow().isoformat()
+    def now() -> datetime:
+        return datetime.utcnow()
 
-    def to_json(self) -> str:
-        return json.dumps(
-            {
-                "ts": self.ts,
-                "level": self.level,
-                "domain": self.domain,
-                "owner": self.owner,
-                "scope": self.scope,
-                "msg": self.msg,
-                "data": self.data,
-                "runtime_id": self.runtime_id,
-            }
+    def with_runtime_id(self, runtime_id: str) -> "LogEvent":
+        """
+        Ritorna una copia dell'evento con runtime_id valorizzato.
+        """
+        return LogEvent(
+            ts=self.ts,
+            level=self.level,
+            domain=self.domain,
+            owner=self.owner,
+            scope=self.scope,
+            msg=self.msg,
+            data=self.data,
+            runtime_id=runtime_id,
         )

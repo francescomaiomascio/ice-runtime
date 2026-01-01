@@ -1,39 +1,65 @@
+from __future__ import annotations
+
+from typing import Optional
+
 from .event import LogEvent
 from .router import LogRouter
 
-_router: LogRouter | None = None
+_router: Optional[LogRouter] = None
 
-def init(router: LogRouter):
+
+# ---------------------------------------------------------------------------
+# INIT
+# ---------------------------------------------------------------------------
+
+def init(router: LogRouter) -> None:
+    """
+    Registra il LogRouter globale.
+    Deve essere chiamato UNA sola volta nel bootstrap.
+    """
     global _router
     _router = router
+
 
 def is_initialized() -> bool:
     return _router is not None
 
-def emit(event: LogEvent):
+
+# ---------------------------------------------------------------------------
+# EMIT
+# ---------------------------------------------------------------------------
+
+def emit(event: LogEvent) -> None:
+    """
+    Entry point globale per il logging runtime-safe.
+    """
     if not _router:
         return
-    if event.runtime_id is None:
-        event = LogEvent(
-            event.ts,
-            event.level,
-            event.domain,
-            event.owner,
-            event.scope,
-            event.msg,
-            event.data,
-            _router.runtime.runtime_id,
-        )
-    _router.route(event)
 
+    # Runtime ID viene risolto dal router/context
+    if event.runtime_id is None:
+        event = event.with_runtime_id(_router.ctx.runtime_id)
+
+    _router.emit(event)
+
+
+# ---------------------------------------------------------------------------
+# UTILS
+# ---------------------------------------------------------------------------
 
 def set_phase(phase: str) -> None:
     if not _router:
         return
-    _router.runtime.set_phase(phase)
+    _router.ctx.set_phase(phase)
+
+
+# ---------------------------------------------------------------------------
+# SHORTHANDS (compatibilità)
+# ---------------------------------------------------------------------------
 
 def info(domain, owner, scope, msg, data=None):
     emit(LogEvent(LogEvent.now(), "INFO", domain, owner, scope, msg, data, None))
+
 
 def error(domain, owner, scope, msg, data=None):
     emit(LogEvent(LogEvent.now(), "ERROR", domain, owner, scope, msg, data, None))
