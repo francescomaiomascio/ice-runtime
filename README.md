@@ -6,27 +6,37 @@
 [![Language](https://img.shields.io/badge/python-3.x-111827?style=flat)](#)
 [![License](https://img.shields.io/badge/license-MIT-7A7CFF?style=flat)](#)
 
-
 ICE Runtime is the **execution core** of the ICE ecosystem.
 
 It provides a structured, extensible, and policy-aware runtime designed to
 coordinate applications, sessions, events, memory, and transports in a
-coherent system.
+coherent and inspectable system.
 
-ICE Runtime is not a framework in the traditional sense.
-It is an **operational substrate** for long-living, stateful, and inspectable
+ICE Runtime is not a traditional framework.
+It is an **operational substrate** for long-living, stateful, and observable
 intelligent systems.
+
+---
+
+## Role in the ICE Ecosystem
+
+ICE Runtime sits at the center of ICE execution.
+
+It does **not** define intelligence, domain logic, or user interfaces.
+Instead, it enforces **how things happen**, **in which order**, and **under which rules**.
+
+All ICE applications, agents, and products ultimately execute *through* the Runtime.
 
 ---
 
 ## Core Principles
 
 - Explicit lifecycle management  
-- Strong separation of concerns  
+- Strong separation of responsibilities  
 - Event-driven coordination  
 - Capability-based access control  
+- Deterministic state transitions  
 - Runtime introspection and observability  
-- Designed for orchestration, not scripts  
 
 ---
 
@@ -34,66 +44,28 @@ intelligent systems.
 
 ICE Runtime is responsible for:
 
-- Managing the system lifecycle
-- Coordinating sessions and workspaces
-- Enforcing capability-based permissions
-- Routing and validating events
-- Governing state transitions and memory
-- Exposing structured logging and transports
-- Acting as the execution substrate for ICE applications
-
----
-
-## Installation
-```bash
-pip install ice-runtime
-```
-
-Or in editable mode for development:
-```bash
-pip install -e .
-```
+- Managing process, session, and workspace lifecycles
+- Executing and supervising runs
+- Routing, validating, and persisting events
+- Enforcing capability and authority boundaries
+- Governing state transitions and memory exposure
+- Providing structured logging and transport abstractions
+- Acting as the execution substrate for higher-level ICE systems
 
 ---
 
 ## Usage
 
-ICE Runtime is typically not consumed directly by end users.
-It is designed to be embedded or orchestrated by:
+ICE Runtime is typically **not consumed directly by end users**.
 
-- IDEs
+It is embedded or orchestrated by:
+
 - Agent systems
+- IDE integrations
 - Automation layers
-- Higher-level ICE products
+- ICE products such as ICE Studio
 
-A minimal entrypoint is exposed via:
+A minimal entrypoint is available via:
+
 ```bash
 python -m ice_runtime
-```
-
----
-
-## Design Philosophy
-
-ICE Runtime treats software as a **living system**, not a static artifact.
-
-This means:
-
-- State is explicit
-- Transitions are validated
-- Events are first-class citizens
-- Time and memory are modeled, not assumed
-
-The runtime is built to evolve without collapsing.
-
----
-
-## Status
-
-This project is under active development. APIs may evolve, but architectural boundaries are considered stable.
-
----
-
-## License
-
-This project is licensed under the terms of the MIT license. See the `LICENSE` file for details.
