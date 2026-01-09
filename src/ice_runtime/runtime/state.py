@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 ICE Runtime — Derived Run State
 ===============================
@@ -11,15 +13,15 @@ Regole fondamentali:
 
 Lo stato è:
 → una proiezione read-only
-→ derivata da eventi + state machine
-→ usabile per debug, UI, audit
+→ derivata ESCLUSIVAMENTE dalla RunStateMachine
+→ usabile per debug, UI, audit, introspezione
 
 RFC:
 - RFC-ICE-003 (Event Model)
 - RFC-ICE-005 (Run State Machine)
 """
 
-from typing import Optional, Dict, Any
+from typing import Dict, Any, Optional
 
 from ice_runtime.runtime.state_machine import RunStateMachine
 
@@ -30,8 +32,11 @@ class RunState:
 
     Questa classe:
     - NON permette transizioni
-    - NON espone metodi di mutazione
-    - NON ha logica di business
+    - NON espone mutazioni
+    - NON contiene logica di business
+    - NON è autoritativa
+
+    È una proiezione.
     """
 
     def __init__(
@@ -40,53 +45,48 @@ class RunState:
         state_machine: RunStateMachine,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
-        self._state_machine = state_machine
+        self._sm = state_machine
         self._metadata = metadata or {}
 
-    # ------------------------------------------------------------------ #
+    # ------------------------------------------------------------------
     # STATO CANONICO
-    # ------------------------------------------------------------------ #
+    # ------------------------------------------------------------------
 
     @property
     def state(self) -> str:
         """
         Stato canonico del Run (RFC-ICE-005).
         """
-        return self._state_machine.state
+        return self._sm.state
 
     @property
     def is_terminal(self) -> bool:
         """
-        Indica se il Run è in stato finale.
+        True se il Run è in uno stato finale.
         """
-        return self.state in {
-            RunStateMachine.COMMITTED,
-            RunStateMachine.ABORTED,
-            RunStateMachine.TERMINATED_BY_RUNTIME,
-            RunStateMachine.TERMINATED,
-        }
+        return self._sm.is_terminal()
 
-    # ------------------------------------------------------------------ #
+    # ------------------------------------------------------------------
     # METADATA DERIVATA (NON AUTORITATIVA)
-    # ------------------------------------------------------------------ #
+    # ------------------------------------------------------------------
 
     @property
     def metadata(self) -> Dict[str, Any]:
         """
-        Metadata accessoria (debug / UI / introspezione).
+        Metadata accessoria (debug / UI / audit).
 
         NON è causale.
-        NON influenza il runtime.
+        NON influenza il Runtime.
         """
         return dict(self._metadata)
 
-    # ------------------------------------------------------------------ #
-    # RAPPRESENTAZIONE
-    # ------------------------------------------------------------------ #
+    # ------------------------------------------------------------------
+    # SERIALIZZAZIONE
+    # ------------------------------------------------------------------
 
     def to_dict(self) -> Dict[str, Any]:
         """
-        Rappresentazione serializzabile dello stato.
+        Rappresentazione serializzabile dello stato del Run.
         """
         return {
             "state": self.state,

@@ -5,11 +5,11 @@ ICE Runtime — Error Definitions
 Questo modulo definisce gli errori FONDATIVI del Runtime ICE.
 
 Regole:
-- Questi errori rappresentano violazioni strutturali
-- NON sono recoverable dall'agente
+- rappresentano violazioni strutturali
+- NON sono recoverable
 - NON sono errori di dominio
 - NON sono errori di IO
-- Sono segnali di incoerenza del sistema o uso illegittimo
+- NON sono errori applicativi
 
 Se uno di questi errori emerge:
 → il Run DEVE abortire
@@ -21,42 +21,45 @@ class RuntimeError(Exception):
     """
     Errore base del Runtime ICE.
 
-    Usato solo per:
+    Usato esclusivamente per:
     - uso illegittimo dell'API Runtime
     - violazioni di contratto interno
-    - inconsistenze strutturali
+    - incoerenze strutturali
 
-    NON deve essere catturato da agenti o layer superiori.
+    NON deve essere intercettato da agenti
+    o layer superiori.
     """
     pass
 
 
 class RunNotFoundError(RuntimeError):
     """
-    Sollevato quando un RunID non esiste nel Runtime.
+    Sollevato quando un RunID non esiste
+    nel contesto del Runtime.
     """
     pass
 
 
 class RunAlreadyExecutedError(RuntimeError):
     """
-    Sollevato quando si tenta di eseguire un Run già terminato.
+    Sollevato quando si tenta di rieseguire
+    un Run già terminato o abortito.
     """
     pass
 
 
 class InvalidRunStateError(RuntimeError):
     """
-    Sollevato quando una transizione di stato non è ammessa
-    dalla state machine RFC-ICE-005.
+    Sollevato quando un'operazione viene richiesta
+    in uno stato del Run non valido.
     """
     pass
 
 
 class RuntimeInvariantViolation(RuntimeError):
     """
-    Sollevato quando un invariante fondativo del Runtime
-    viene violato.
+    Sollevato quando un invariante fondativo
+    del Runtime viene violato.
 
     Questo è SEMPRE un bug.
     """
