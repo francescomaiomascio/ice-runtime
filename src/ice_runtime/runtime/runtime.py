@@ -1,30 +1,34 @@
+from __future__ import annotations
+
 """
 ICE Runtime — Core Authority
 ============================
 
-Questo modulo definisce il Runtime ICE come entità sovrana.
+Il Runtime ICE è l'autorità sovrana di esecuzione.
 
-Il Runtime:
-- crea Run
-- governa l'esecuzione
-- istanzia executor e state machine
-- NON esegue inferenza
-- NON orchestra agenti
-- NON fa IO di dominio
+Responsabilità:
+- identità del runtime
+- lifecycle globale
+- creazione e governo dei Run
+- isolamento causale
+- accesso controllato allo stato derivato
 
-Il Runtime è:
-→ autorità
-→ boundary
-→ punto di verità operativa
+NON:
+- orchestrazione
+- agenti
+- inferenza
+- IO di dominio
 """
 
 from typing import Dict
+from pathlib import Path
 
 from ice_runtime.ids.runtime_id import RunID
 from ice_runtime.runtime.run_executor import RunExecutor
 from ice_runtime.runtime.state_machine import RunStateMachine
 from ice_runtime.runtime.state import RunState
 from ice_runtime.events.kernel.emitter import EventEmitter
+from ice_runtime.events.kernel.store import EventStore
 from ice_runtime.runtime.errors import RuntimeError
 
 
@@ -32,27 +36,72 @@ class Runtime:
     """
     Runtime ICE.
 
-    Un'istanza di Runtime:
+    Un Runtime:
+    - è unico per dominio
     - governa più Run
-    - mantiene isolamento tra Run
-    - espone solo API legittime
+    - mantiene isolamento e causalità
     """
 
-    def __init__(self, *, emitter: EventEmitter) -> None:
+    # ------------------------------------------------------------------
+    # LIFECYCLE
+    # ------------------------------------------------------------------
+
+    def __init__(
+        self,
+        *,
+        runtime_id: str,
+        base_dir: Path,
+        emitter: EventEmitter,
+        event_store: EventStore,
+        log_router=None,
+    ) -> None:
+        self.runtime_id = runtime_id
+        self.base_dir = base_dir
+
         self._emitter = emitter
+        self._event_store = event_store
+        self._log_router = log_router
+
         self._runs: Dict[RunID, RunExecutor] = {}
         self._states: Dict[RunID, RunState] = {}
 
-    # ------------------------------------------------------------------ #
-    # API PUBBLICA
-    # ------------------------------------------------------------------ #
+        self._bootstrapped = False
+        self._running = False
+        self._stopped = False
+
+    def mark_bootstrapped(self) -> None:
+        if self._bootstrapped:
+            raise RuntimeError("Runtime already bootstrapped")
+        self._bootstrapped = True
+
+    def start(self) -> None:
+        if not self._bootstrapped:
+            raise RuntimeError("Runtime not bootstrapped")
+        if self._running:
+            return
+        if self._stopped:
+            raise RuntimeError("Runtime already stopped")
+
+        self._running = True
+
+    def stop(self) -> None:
+        if self._stopped:
+            return
+        self._running = False
+        self._stopped = True
+
+    # ------------------------------------------------------------------
+    # RUN API
+    # ------------------------------------------------------------------
 
     def create_run(self) -> RunID:
         """
-        Crea un nuovo Run e ne registra lo stato iniziale.
+        Crea un nuovo Run.
 
-        NON avvia l'esecuzione.
+        Non avvia l'esecuzione.
         """
+        self._ensure_running()
+
         run_id = RunID.generate()
 
         state_machine = RunStateMachine()
@@ -72,9 +121,9 @@ class Runtime:
     def execute_run(self, run_id: RunID) -> None:
         """
         Esegue un Run esistente.
-
-        Ogni Run può essere eseguito UNA SOLA volta.
         """
+        self._ensure_running()
+
         executor = self._get_executor(run_id)
         executor.execute()
 
@@ -87,12 +136,15 @@ class Runtime:
 
         return self._states[run_id]
 
-    # ------------------------------------------------------------------ #
+    # ------------------------------------------------------------------
     # INTERNALS
-    # ------------------------------------------------------------------ #
+    # ------------------------------------------------------------------
 
     def _get_executor(self, run_id: RunID) -> RunExecutor:
         if run_id not in self._runs:
             raise RuntimeError(f"Run not found: {run_id}")
-
         return self._runs[run_id]
+
+    def _ensure_running(self) -> None:
+        if not self._running or self._stopped:
+            raise RuntimeError("Runtime not running")
