@@ -9,14 +9,16 @@ Responsabilità ESCLUSIVE:
 - applicare vincoli temporali, di scope e di Run
 - NEGARE l'uso in caso di qualsiasi violazione
 
-Questo modulo:
-- NON concede capability
-- NON registra capability
-- NON muta stato
-- NON emette eventi (lo fa il Runtime)
+NON:
+- concede capability
+- registra capability
+- muta stato
+- emette eventi
 
 Qui si FALLISCE o si PASSA.
 """
+
+from __future__ import annotations
 
 from datetime import datetime
 from typing import Optional
@@ -34,7 +36,9 @@ class CapabilityEnforcer:
     """
     Enforcer puro e stateless.
 
-    Ogni chiamata è indipendente.
+    Ogni chiamata è:
+    - indipendente
+    - deterministica
     """
 
     @staticmethod
@@ -46,44 +50,44 @@ class CapabilityEnforcer:
         now: Optional[datetime] = None,
     ) -> None:
         """
-        Verifica che una capability possa essere usata.
+        Verifica che una capability possa essere usata ORA.
 
-        Se la verifica FALLISCE → eccezione.
+        Se FALLISCE → eccezione.
         Se PASSA → ritorna None.
 
-        PARAMETRI:
+        Parametri:
         - grant: CapabilityGrant concessa dal Runtime
         - current_run_id: Run attualmente in esecuzione
-        - requested_scope: scope richiesto dall'azione (opzionale)
+        - requested_scope: scope richiesto dall'azione
         - now: timestamp corrente (iniettato dal Runtime)
         """
 
-        # -------------------------
-        # 1. Run ownership
-        # -------------------------
+        # --------------------------------------------------------------
+        # 1. Run ownership (vincolo causale)
+        # --------------------------------------------------------------
         if grant.run_id != current_run_id:
             raise CapabilityRunMismatchError(
                 expected=grant.run_id,
                 actual=current_run_id,
             )
 
-        # -------------------------
+        # --------------------------------------------------------------
         # 2. Revoca esplicita
-        # -------------------------
+        # --------------------------------------------------------------
         if grant.revoked:
             raise CapabilityRevokedError(grant.capability_id)
 
-        # -------------------------
+        # --------------------------------------------------------------
         # 3. Scadenza temporale
-        # -------------------------
+        # --------------------------------------------------------------
         if grant.expires_at is not None:
             now_ts = now or datetime.utcnow()
             if now_ts >= grant.expires_at:
                 raise CapabilityExpiredError(grant.capability_id)
 
-        # -------------------------
+        # --------------------------------------------------------------
         # 4. Scope enforcement
-        # -------------------------
+        # --------------------------------------------------------------
         if requested_scope is not None:
             if not grant.allows_scope(requested_scope):
                 raise CapabilityScopeViolationError(
@@ -91,7 +95,7 @@ class CapabilityEnforcer:
                     requested_scope=requested_scope,
                 )
 
-        # -------------------------
+        # --------------------------------------------------------------
         # 5. SUCCESSO
-        # -------------------------
+        # --------------------------------------------------------------
         return None
