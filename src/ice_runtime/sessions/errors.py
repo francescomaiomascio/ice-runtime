@@ -1,8 +1,17 @@
 from __future__ import annotations
 
+from ice_runtime.runtime.errors import RuntimeError
+
 
 class SessionError(RuntimeError):
-    """Errore base per il sottosistema sessions."""
+    """
+    Errore base del sottosistema Sessions.
+
+    Qualsiasi SessionError indica:
+    - violazione strutturale
+    - uso illegittimo del Runtime
+    """
+    pass
 
 
 class SessionNotFoundError(SessionError):
@@ -12,11 +21,17 @@ class SessionNotFoundError(SessionError):
 
 
 class SessionStateError(SessionError):
+    """
+    Operazione non ammessa nello stato corrente della Session.
+    """
     def __init__(self, message: str):
         super().__init__(message)
 
 
-class WorkspaceError(RuntimeError):
+class WorkspaceError(SessionError):
+    """
+    Errore legato al workspace di una Session.
+    """
     def __init__(self, workspace_id: str, message: str):
         super().__init__(f"[workspace={workspace_id}] {message}")
         self.workspace_id = workspace_id

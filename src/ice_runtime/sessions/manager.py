@@ -1,156 +1,88 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, Optional, List
+from typing import Dict, List
 
-from ice_core.logging.bridge import get_logger
-
-from .context import SessionContext, SessionConfig
-from .workspace import Workspace
-from .errors import (
+from ice_runtime.sessions.workspace import Workspace
+from ice_runtime.sessions.errors import (
     SessionError,
     WorkspaceNotFoundError,
+    WorkspaceAlreadyExistsError,
 )
-
-logger = get_logger(__name__)
 
 
 class SessionRegistry:
     """
-    Runtime registry puro.
+    Registro runtime-side.
+
+    NON persiste.
+    NON è globale.
+    Vive quanto il Runtime.
     """
 
     def __init__(self) -> None:
         self._workspaces: Dict[str, Workspace] = {}
-        self._contexts: Dict[str, SessionContext] = {}
 
-    # --- workspace -------------------------------------------------
+    # -------------------------------------------------
+    # WORKSPACES
+    # -------------------------------------------------
 
-    def register_workspace(self, ws: Workspace) -> None:
-        self._workspaces[ws.id] = ws
+    def register_workspace(self, workspace: Workspace) -> None:
+        if workspace.workspace_id in self._workspaces:
+            raise WorkspaceAlreadyExistsError(workspace.workspace_id)
 
-    def get_workspace(self, workspace_id: str) -> Optional[Workspace]:
-        return self._workspaces.get(workspace_id)
+        self._workspaces[workspace.workspace_id] = workspace
+
+    def get_workspace(self, workspace_id: str) -> Workspace:
+        try:
+            return self._workspaces[workspace_id]
+        except KeyError:
+            raise WorkspaceNotFoundError(workspace_id)
 
     def list_workspaces(self) -> List[Workspace]:
         return list(self._workspaces.values())
 
-    # --- context ---------------------------------------------------
-
-    def register_context(self, ctx: SessionContext) -> None:
-        self._contexts[ctx.context_id] = ctx
-
-    def unregister_context(self, context_id: str) -> None:
-        self._contexts.pop(context_id, None)
-
-    def active_contexts(self) -> List[SessionContext]:
-        return list(self._contexts.values())
-
 
 class SessionManager:
     """
-    Runtime SessionManager.
+    Runtime SessionManager (NON singleton).
 
-    Coordina:
-    - Workspace runtime
-    - SessionContext
+    Responsabilità:
+    - gestire Workspace
+    - fornire binding Run → Workspace
+    - NON gestisce Run
+    - NON gestisce Engine
     """
 
-    _instance: Optional["SessionManager"] = None
+    def __init__(self, *, base_dir: Path) -> None:
+        self._base_dir = base_dir.resolve()
+        self._registry = SessionRegistry()
 
-    def __init__(self, base_path: Path | str):
-        self.base_path = Path(base_path).resolve()
-        self.registry = SessionRegistry()
-        self._initialized = False
+        self._base_dir.mkdir(parents=True, exist_ok=True)
 
-    # --------------------------------------------------------------
-    # SINGLETON
-    # --------------------------------------------------------------
+    # -------------------------------------------------
+    # WORKSPACE API
+    # -------------------------------------------------
 
-    @classmethod
-    def get(cls) -> "SessionManager":
-        if not cls._instance:
-            raise SessionError("SessionManager not initialized")
-        return cls._instance
-
-    @classmethod
-    def set(cls, mgr: Optional["SessionManager"]) -> None:
-        cls._instance = mgr
-
-    # --------------------------------------------------------------
-    # INIT / SHUTDOWN
-    # --------------------------------------------------------------
-
-    async def initialize(self) -> None:
-        if self._initialized:
-            return
-
-        self.base_path.mkdir(parents=True, exist_ok=True)
-        self._initialized = True
-        SessionManager.set(self)
-
-        logger.info("SessionManager initialized")
-
-    async def shutdown(self) -> None:
-        for ctx in self.registry.active_contexts():
-            try:
-                await ctx.close()
-            except Exception:
-                pass
-
-        for ws in self.registry.list_workspaces():
-            try:
-                await ws.close()
-            except Exception:
-                pass
-
-        SessionManager.set(None)
-        self._initialized = False
-
-    # --------------------------------------------------------------
-    # WORKSPACES
-    # --------------------------------------------------------------
-
-    async def register_workspace(
+    def create_workspace(
         self,
         *,
         workspace_id: str,
         name: str,
-        path: Path | str,
+        path: Path,
     ) -> Workspace:
-        ws = Workspace(
+        workspace = Workspace(
             workspace_id=workspace_id,
             name=name,
             base_path=path,
         )
-        await ws.initialize()
-        self.registry.register_workspace(ws)
-        return ws
 
-    async def get_workspace(self, workspace_id: str) -> Workspace:
-        ws = self.registry.get_workspace(workspace_id)
-        if not ws:
-            raise WorkspaceNotFoundError(workspace_id)
-        return ws
+        workspace.initialize()
+        self._registry.register_workspace(workspace)
+        return workspace
 
-    # --------------------------------------------------------------
-    # CONTEXT
-    # --------------------------------------------------------------
+    def get_workspace(self, workspace_id: str) -> Workspace:
+        return self._registry.get_workspace(workspace_id)
 
-    async def activate_workspace(
-        self,
-        *,
-        workspace_id: str,
-        config: Optional[SessionConfig] = None,
-    ) -> SessionContext:
-        ws = await self.get_workspace(workspace_id)
-
-        ctx = SessionContext.create(
-            workspace=ws,
-            config=config,
-            set_current=True,
-        )
-
-        self.registry.register_context(ctx)
-        ctx.on_close(lambda c: self.registry.unregister_context(c.context_id))
-        return ctx
+    def list_workspaces(self) -> List[Workspace]:
+        return self._registry.list_workspaces()

@@ -13,15 +13,12 @@ class RunContext:
     """
     ICE Runtime — Run Context (READ-ONLY)
 
-    Questa NON è una sessione.
-    Questa è una vista contestuale costruita dal Runtime
-    per un singolo Run.
+    Vista contestuale costruita dal Runtime per UN Run.
 
-    Proprietà:
-    - immutabile
-    - non globale
-    - non thread-local
-    - non mutabile
+    NON è:
+    - una Session
+    - uno stato mutabile
+    - una sorgente di verità
     """
 
     run_id: str
@@ -36,7 +33,7 @@ class RunContext:
     metadata: Dict[str, Any]
 
     # =====================================================
-    # ACCESS GUARANTEES
+    # CAPABILITY ACCESS (SAFE)
     # =====================================================
 
     def has_capability(self, capability: str) -> bool:
@@ -54,12 +51,12 @@ class RunContext:
 
     def iter_memory(self) -> Iterable[MemoryView]:
         """
-        Itera SOLO sulle viste già filtrate dal Runtime.
+        Itera SOLO sulle viste filtrate dal Runtime.
         """
         return self.memory_views
 
     # =====================================================
-    # NO STATE, NO SETTERS
+    # STATE ACCESS (READ-ONLY)
     # =====================================================
 
     def get_state(self) -> RunState:
@@ -73,7 +70,7 @@ class RunContext:
         return {
             "run_id": self.run_id,
             "agent_id": self.agent_id,
-            "state": self.state.value,
+            "state": self.state.state,   # ← corretto
             "workspace_id": self.workspace_id,
             "capabilities": list(self.capabilities),
             "memory_count": len(list(self.memory_views)),
