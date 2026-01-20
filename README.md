@@ -1,6 +1,7 @@
-<p align="center">
+<p align="left">
   <img src="docs/assets/logo-runtime.svg" width="420" alt="ICE Runtime">
 </p>
+
 
 
 [![License](https://img.shields.io/github/license/francescomaiomascio/ice-runtime)](LICENSE)
@@ -11,7 +12,7 @@
 
 > **The execution core of the ICE environment**  
 > Orchestrating agents, workflows, and system state with explicit authority.
-ma che 
+
 ---
 
 ## What is ICE Runtime
