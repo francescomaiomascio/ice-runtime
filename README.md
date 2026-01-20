@@ -1,13 +1,7 @@
-<table width="100%" cellspacing="0" cellpadding="0">
-  <tr>
-    <td align="left" valign="middle">
-      <h1>ICE Runtime</h1>
-    </td>
-    <td align="right" valign="middle">
-      <img src="docs/assets/logo-runtime.svg" width="140" alt="ICE Runtime logo">
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <img src="docs/assets/logo-runtime.svg" width="420" alt="ICE Runtime">
+</p>
+
 
 [![License](https://img.shields.io/github/license/francescomaiomascio/ice-runtime)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/francescomaiomascio/ice-runtime)](https://github.com/francescomaiomascio/ice-runtime/stargazers)
@@ -27,7 +21,7 @@ ICE Runtime is the **authoritative execution layer** of the ICE ecosystem.
 It is responsible for transforming abstract specifications into
 **controlled, observable, and deterministic execution**.
 
-ICE Runtime coordinates how intelligent systems:co
+ICE Runtime coordinates how intelligent systems:
 - start execution
 - transition state
 - orchestrate agents and workflows
